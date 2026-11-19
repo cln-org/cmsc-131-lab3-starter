@@ -46,8 +46,6 @@ segment .text
         global  _index_lines
 
 _index_lines:
-        enter   0,0
-        pusha
 
         ;
         ; TODO: build the index.
@@ -66,7 +64,82 @@ _index_lines:
         ; writing at max.
         ;
 
-        popa
-        mov     eax, 0
+        enter   0,0
+        push    ebx
+        push    esi
+        push    edi
+        cld                             ; explicitly set direction flag to auto-increment
+
+        mov     esi, [ebp + 8]          ; esi = current buffer pointer (start at buf)
+        mov     ecx, [ebp + 12]         ; ecx = total buffer length
+        mov     edi, [ebp + 16]         ; edi = pointer to out array
+        mov     edx, 0                  ; edx = line count (count = 0)
+
+                                        ; guard: check for empty buffer or non-positive capacity limit
+        cmp     ecx, 0
+        jle     .done                   ; len <= 0, return 0 lines immediately
+        cmp     dword [ebp + 20], 0     ; max <= 0, return 0 lines immediately
+        jle     .done
+
+        mov     ebx, esi                ; ebx = pointer to start of current line
+        add     ecx, esi                ; ecx = buffer end pointer (buf + len)
+
+.scan_loop:
+        cmp     esi, ecx
+        jae     .check_leftover         ; reached end of buffer
+
+        mov     al, [esi]
+        cmp     al, 0x0A                ; check for newline character ('\n')
+        je      .found_newline
+
+        inc     esi                     ; move to next byte in buffer
+        jmp     .scan_loop
+
+.found_newline: 
+        cmp     edx, [ebp + 20]         ; out array is at max capacity, stop writing
+        jge     .done
+
+                                        ; calculate offset = line_start (ebx) - buf ([ebp + 8])
+        mov     eax, ebx
+        sub     eax, [ebp + 8]          ; eax = byte offset from buf
+        mov     [edi], eax              ; out[count].offset = offset
+
+                                        ; calculate length = current_ptr (esi) - line_start (ebx)
+        mov     eax, esi                
+        sub     eax, ebx                ; eax = line length (exclusing '\n')
+        mov     [edi + 4], eax          ; out[count].length = length
+
+        add     edi, 8                  ; move to next struct line entry (8 bytes)
+        inc     edx                     ; count++
+
+        inc     esi                     ; skip past '\n'
+        mov     ebx, esi                ; update line_start to next byte
+        jmp     .scan_loop
+
+                                        ; handling missing trailing newline
+.check_leftover:                        ; if esi > ebx, leftover bytes exist after the final '\n'
+        cmp     esi, ebx
+        jbe     .done                   ; no leftover bytes
+
+        cmp     edx, [ebp + 20]         ; check if count < max
+        jge     .done
+
+                                        ; calculate offset for trailing line
+        mov     eax, ebx
+        sub     eax, [ebp + 8]
+        mov     [edi], eax              ; out[count].offset
+
+                                        ; calculate length of trailing line
+        mov     eax, esi
+        sub     eax, ebx
+        mov     [edi + 4], eax          ; out[count].length
+
+        inc     edx                     ; count++
+
+.done:
+        mov     eax, edx                ; return total count written in EAX
+        pop     edi
+        pop     esi
+        pop     ebx
         leave
         ret
