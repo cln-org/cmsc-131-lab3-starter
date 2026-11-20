@@ -75,9 +75,8 @@ needs. Leave the rest of this file as it is.
 
 ## Design Notes
 
-Complete this section before the Week 1 progress report. The syllabus asks
-for problem analysis, a solution architecture, and an estimated timeline.
-Keep each part short. Update it when the plan changes.
+- **`line_matches` (`match.asm`):** 
+line_matches receives a line `(line)`, its length `(linelen)`, a pattern `(pat)`, its length `(patlen)`, and the -i and -w settings. It scans each possible position in the line and compares the pattern with the line using repe cmpsb. For -i, it compares lowercase values without changing the original text. For -w, it checks the characters before and after the match. It returns 1 for a valid match and 0 otherwise, while preserving the required registers
 
 ### Problem analysis
 
@@ -94,12 +93,6 @@ The five flags and what they do:
 Note: No flag just prints the matching lines.
 
 The oracle for this laboratory is `grep`, run as `LC_ALL=C grep -F`, a command that searches a file for lines containing some text that is already installed in our machine. `make check` runs 1344 comparisons against it, and correctness just means byte-identical output. Because `rengrep` is a tool subset of `grep -F`, both of them treats the pattern as a literal substring, not a word. So `cat` matches `concatenate`,and agreeing with `grep` means `rengrep` should print that line, unless checked with a `-w` flag, of which case the whole-word boundary check around that exact literal string is applied.
-
-### Solution architecture
-
-How the four routines split the work. How the line index is built from
-one buffer, how the flag table dispatches, and which registers each
-routine uses.
 
 ### Solution architecture
 
