@@ -101,6 +101,25 @@ How the four routines split the work. How the line index is built from
 one buffer, how the flag table dispatches, and which registers each
 routine uses.
 
+### Solution architecture
+
+The program is the provided C driver plus four cdecl assembly routines. Arguments start at `[ebp+8]`, results return in `eax`, and `ebx`, `esi`, `edi`, and `ebp` are preserved. Every routine that uses string instructions runs `cld` first, since the direction flag persists across calls.
+
+- **`parse_args` (`args.asm`):** 
+Walks `argv`. A token starting with `-` and longer than one character is a flag group. Each letter is looked up in the table `n c v i w` with `repne scasb`, and the bit is set at index `4 - ecx`. Other tokens are positional (pattern, then path). An unknown flag, a missing positional, or a third positional is an error return.
+
+- **`index_lines` (`lines.asm`):** 
+One pass over the buffer, scanning for `0x0A`. Each line's start and length (newline excluded) is stored in the output array. A final line with no newline is still recorded, an empty buffer returns 0, and writing stops at `max`.
+
+- **`line_matches` (`match.asm`):** 
+Tries each start offset from 0 to `linelen - patlen`, using signed jumps so an over-long pattern skips the loop. Without `-i`, `repe cmpsb` compares the bytes. With `-i`, a separate loop folds `A`-`Z` in registers only, never writing to the buffer. Both paths share the same candidate loop and the same `-w` boundary check. A failed boundary check keeps scanning. An empty pattern uses `test ecx, ecx` to set ZF first.
+
+- **`int_to_dec` (`fmt.asm`):** 
+Divides by 10 in a bottom-tested loop (so 0 gives `'0'`), pushes each remainder, then pops them into the output buffer. Returns the digit count.
+
+**Flow:** `parse_args` once at startup, `index_lines` once per file, `line_matches` once per line, and `int_to_dec` whenever `-n` or `-c` needs a number. The routines only communicate through the driver, so each can be tested alone with `contract_test`.
+
+
 ### Timeline
 
 One line per week. Name the subsystem each week finishes and the member
@@ -109,9 +128,9 @@ who owns it.
 | Week | Goal | Owner |
 |---|---|---|
 | 1 | Buffering and lines, flags (`args.asm`, `lines.asm`) | Ryona Cassandra P. Honrado |
-| 2 | Matching (`match.asm`) | |
-| 3 | Formatting and additional tests (`fmt.asm`) | |
-| 4 | Defense | |
+| 2 | Matching (`match.asm`) | Jhon Chriztopher Nice, Erine Lourdes Medalla |
+| 3 | Formatting and additional tests (`fmt.asm`) | Adrienne Nicole Tipon |
+| 4 | Defense | All Members |
 
 ## Subsystem Ownership
 
@@ -122,8 +141,8 @@ share one. The commit history must agree with this table.
 | Subsystem | Owner |
 |---|---|
 | Buffering and lines (`lines.asm`) | Ryona Cassandra P. Honrado |
-| Matching (`match.asm`) | |
-| Formatting and flags (`fmt.asm`, `args.asm`, the tests you add) | Ryona Cassandra P. Honrado &  |
+| Matching (`match.asm`) | Jhon Chriztopher Nice, Erine Lourdes Medalla |
+| Formatting and flags (`fmt.asm`, `args.asm`, the tests you add) | Ryona Cassandra P. Honrado & Adrienne Nicole Tipon |
 
 ## Quirks and Issues
 
