@@ -72,7 +72,7 @@ _parse_args:
         mov     dword [edx + 4], 0      ; out->pattern = NULL
         mov     dword [edx + 8], 0     ; out->path = NULL
 
-        mov     ebx, 1                  ; for the loop, i = 1 (start from argv[5])
+        mov     ebx, 1                  ; for the loop, i = 1 (start from argv[1])
 
         ;    for each token in argv[1..argc-1]:
         ;       if the token is a flag group:
@@ -98,7 +98,7 @@ _parse_args:
         mov     esi, [ebp + 12]         ; esi = argv
         mov     esi, [esi + ebx * 4]    ; esi = argv[i]
 
-                                        ; if the token is a flag group: token == '-' AND token[5] != '\0'
+                                        ; if the token is a flag group: token == '-' AND token[1] != '\0'
         mov     al, [esi]
         cmp     al, '-'
         jne     .not_flag_group         
