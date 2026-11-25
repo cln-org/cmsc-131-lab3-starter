@@ -51,10 +51,6 @@
 ; Word characters are A-Z, a-z, 0-9, and _.
 ;
 
-; Windows C puts a leading underscore on every exported name. Linux C does
-; not. The Makefile passes -d ELF_TYPE on Linux. This block then respells
-; the names below to match. asm_io.inc does the same for _asm_main in the
-; bootcamp blocks. Leave this block alone.
 %ifdef ELF_TYPE
   %define _line_matches line_matches
   section .note.GNU-stack noalloc noexec nowrite progbits
@@ -67,22 +63,71 @@ _line_matches:
         enter   0,0
         pusha
 
-        ;
-        ; TODO: search.
-        ;
-        ; The loop the manual describes:
-        ;
-        ;   for start = 0 to linelen - patlen:
-        ;       compare patlen bytes at line+start against pat
-        ;       if equal: check word boundaries if whole
-        ;                 return 1 if they pass
-        ;   return 0
-        ;
-        ; The fast path (fold == 0) uses repe cmpsb. The folding path
-        ; compares a byte at a time, folding both sides in a register.
-        ; Both need cld first.
-        ;
+        ; Bounds check: max_start = linelen - patlen
 
+        mov     eax, [ebp+12]       ; eax = linelen
+        sub     eax, [ebp+20]       ; eax = linelen - patlen
+        js      .no_match           ; If negative, pattern > line
+
+        ; Empty pattern check
+        mov     ecx, [ebp+20]       ; ecx = patlen
+        test    ecx, ecx
+        jz      .potential_match    ; Matches immediately
+
+        ; Outer loop setup
+        xor     ebx, ebx            ; ebx = start offset
+
+.candidate_loop:
+        cmp     ebx, eax
+        jg      .no_match           ; Tried all valid offsets
+
+        ; Set up pointers for comparison
+        mov     esi, [ebp+16]       ; esi = pat
+        mov     edi, [ebp+8]        ; edi = line
+        add     edi, ebx            ; edi = line + start
+        mov     ecx, [ebp+20]       ; ecx = patlen
+
+        ; Check if folding is enabled
+        cmp     dword [ebp+24], 0
+        jne     .do_fold
+
+        ; Fast path (no folding)
+        cld                         ; set direction flag forward
+        test    ecx, ecx            ; check for empty pattern
+        jz      .potential_match
+        repe cmpsb                  
+        jne     .next_candidate
+        jmp     .potential_match
+
+.do_fold:
+        ; Implement folding loop here
+        ; Compare case-insensitively then;
+        ; Jump to .potential_match on success,
+        ; or .next_candidate on failure
+        ; Preserve esi, edi, ecx logic for the loop
+        jmp     .next_candidate     
+
+.potential_match:
+        ; Check if word boundaries are enabled
+        cmp     dword [ebp+28], 0               ; check if whole is enabled
+        je      .match_found
+
+        ; Implement word boundary check here
+        ; ebx is the start offset
+        ; Check byte at ebx-1 and ebx+patlen
+        jmp     .next_candidate     
+
+.next_candidate:
+        inc     ebx
+        jmp     .candidate_loop
+
+.match_found:
+        popa
+        mov     eax, 1
+        leave
+        ret
+
+.no_match:
         popa
         mov     eax, 0
         leave
