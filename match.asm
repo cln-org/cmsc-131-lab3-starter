@@ -70,9 +70,9 @@ _line_matches:
         js      .no_match           ; If negative, pattern > line
 
         ; Empty pattern check
-        mov     ecx, [ebp+20]       ; ecx = patlen
-        test    ecx, ecx
-        jz      .potential_match    ; Matches immediately
+        ; mov     ecx, [ebp+20]       ; ecx = patlen
+        ; test    ecx, ecx
+        ; jz      .potential_match    ; Matches immediately
 
         ; Outer loop setup
         xor     ebx, ebx            ; ebx = start offset
@@ -105,7 +105,34 @@ _line_matches:
         ; Jump to .potential_match on success,
         ; or .next_candidate on failure
         ; Preserve esi, edi, ecx logic for the loop
-        jmp     .next_candidate     
+
+        test    ecx, ecx            ; empty pattern matches
+        jz      .potential_match
+
+.fold_loop:
+        mov     dl, [esi]           ; pattern byte (copy)
+        mov     dh, [edi]           ; line byte (copy)
+        cmp     dl, 'A'
+        jb      .pat_folded
+        cmp     dl, 'Z'
+        ja      .pat_folded
+        add     dl, 32              ; to lowercase (register only)
+
+
+.pat_folded:
+        cmp     dh, 'A'
+        jb      .line_folded
+        cmp     dh, 'Z'
+        ja      .line_folded
+        add     dh, 32              ; to lowercase (register only)
+
+.line_folded:
+        cmp     dl, dh
+        jne     .next_candidate
+        inc     esi
+        inc     edi
+        dec     ecx
+        jnz     .fold_loop          ; all matched: fall through
 
 .potential_match:
         ; Check if word boundaries are enabled
@@ -115,7 +142,22 @@ _line_matches:
         ; Implement word boundary check here
         ; ebx is the start offset
         ; Check byte at ebx-1 and ebx+patlen
-        jmp     .next_candidate     
+        mov     esi, [ebp+8]        ; esi = line
+        test    ebx, ebx            ; at line start?
+        jz      .check_after
+        mov     dl, [esi+ebx-1]     ; byte before
+        call    is_word_char
+        jc      .next_candidate
+
+.check_after:
+        mov     ecx, ebx
+        add     ecx, [ebp+20]       ; ecx = start + patlen
+        cmp     ecx, [ebp+12]       ; at line end?
+        jge     .match_found
+        mov     dl, [esi+ecx]       ; byte after
+        call    is_word_char
+        jc      .next_candidate
+        jmp     .match_found
 
 .next_candidate:
         inc     ebx
@@ -131,4 +173,25 @@ _line_matches:
         popa
         mov     eax, 0
         leave
+        ret
+
+; is_word_char: sets carry flag if dl is A-Z, a-z, 0-9 or _
+is_word_char:
+        cmp     dl, '_'
+        je      .yes
+        cmp     dl, '0'
+        jb      .no
+        cmp     dl, '9'
+        jbe     .yes
+        cmp     dl, 'A'
+        jb      .no
+        cmp     dl, 'Z'
+        jbe     .yes
+        cmp     dl, 'a'
+        jb      .no
+        cmp     dl, 'z'
+        jbe     .yes
+.no:    clc
+        ret
+.yes:   stc
         ret
